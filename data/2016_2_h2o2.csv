@@ -1,0 +1,12 @@
+Date:,2016-2,Local:,Nilopolis – RJ – Brazil,,,,,,
+Experiment:,Iodine clock reaction - Hydrogen peroxide variation,,,,,,,,
+Groups:,4,,,,,,,,
+H2O2 unit:,% m/v,,,,,,,,
+Time unit,seconds,,,,,,,,
+,,,,,,,,,
+[H2O2],[H2O2] unc,Group 1,Group 1 unc,Group 2,Group 2 unc,Group 3,Group 3 unc,Group 4,Group 4 unc
+3,0,20,0,20.73,0,20.45,0,22,0
+2.4,0,25,0,25.67,0,26.38,0,25,0
+1.8,0,33,0,33.19,0,36.43,0,27,0
+1.2,0,54,0,46.11,0,44,0,50,0
+0.6,0,109,0,117.96,0,70.2,0,94,0
