@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from uncertainties import unumpy
 import matplotlib.pyplot as plt
-from scipy import stats
+from scipy import stats, odr
 import re
 
 
@@ -45,6 +45,28 @@ class KineticsAnalyser:
     def _linear_fit(self, x, y):
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         return slope, intercept, r_value, p_value, std_err
+
+    def _linear_func(self, B, x):
+        return B[0]*x + B[1]
+
+    def _odr_r_squared(self, y_pred, y):
+        y_abs_error = y_pred - y
+        r2 = 1 - (np.var(y_abs_error) / np.var(y))
+        return r2
+
+    def _odr(self, x, y, x_err, y_err):
+        lin_reg = self._linear_fit(x, y)
+        linear_model = odr.Model(self._linear_func)
+        data = odr.RealData(x, y, sx=x_err, sy=y_err)
+        odr_fit = odr.ODR(data, linear_model, beta0=lin_reg[0:2])
+        out = odr_fit.run()
+
+        slope = out.beta[0]
+        intercept = out.beta[1]
+        r2 = self._odr_r_squared(out.y, y)
+        slope_std_err = out.sd_beta[0]
+
+        return slope, intercept, r2, slope_std_err
 
     def time_dispersion(self):
         return self.data_unc.iloc[:, 1:-2].apply(lambda x: np.std(unumpy.nominal_values(x), ddof=1), axis=1)
