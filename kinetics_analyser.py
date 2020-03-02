@@ -19,6 +19,10 @@ class KineticsAnalyser:
             df['concentration'] = unumpy.uarray(
                 self.data_file.iloc[:, 0], self.data_file.iloc[:, 1])
 
+            df['ln(concentration)'] = unumpy.log(df['concentration'])
+
+            df['1/concentration'] = 1/df['concentration']
+
             exp_number = 1
             column = 2
 
@@ -33,9 +37,9 @@ class KineticsAnalyser:
             # df['median'] = df.iloc[:, 1:].median(axis=1)
             # the above code lines do not work due to a bug: https://github.com/pandas-dev/pandas/issues/14162
 
-            df['average'] = df.iloc[:, 1:].apply(
+            df['average'] = df.iloc[:, 3:].apply(
                 lambda x: x.sum() / x.size, axis=1)
-            df['median'] = df.iloc[:, 1:-1].apply(
+            df['median'] = df.iloc[:, 3:-1].apply(
                 lambda x: np.median(x), axis=1)
 
             return df
@@ -69,15 +73,19 @@ class KineticsAnalyser:
         return slope, intercept, r2, slope_std_err
 
     def time_dispersion(self):
-        return self.data_unc.iloc[:, 1:-2].apply(lambda x: np.std(unumpy.nominal_values(x), ddof=1), axis=1)
+        return self.data_unc.iloc[:, 3:-2].apply(lambda x: np.std(unumpy.nominal_values(x), ddof=1), axis=1)
 
     def summary(self):
         concentration = unumpy.nominal_values(
             self.data_unc['concentration'])
+        ln_concentration = unumpy.nominal_values(
+            self.data_unc['ln(concentration)'])
+        inv_concentration = unumpy.nominal_values(
+            self.data_unc['1/concentration'])
 
         d = {}
 
-        for column in self.data_unc.iloc[:, 1:]:
+        for column in self.data_unc.iloc[:, 3:]:
             v = []
             d_order = {}
 
@@ -87,8 +95,8 @@ class KineticsAnalyser:
             zero_order_test = self._linear_fit(
                 time, concentration)
             first_order_test = self._linear_fit(
-                time, np.log(concentration))
-            second_order_test = self._linear_fit(time, 1/concentration)
+                time, ln_concentration)
+            second_order_test = self._linear_fit(time, inv_concentration)
 
             d_order['R2_zero_order'] = zero_order_test[2]**2
             d_order['R2_first_order'] = first_order_test[2]**2
@@ -158,14 +166,13 @@ class KineticsAnalyser:
     def _xy(self, plot_type='conc', column='average'):
 
         x = self.data_unc[column]
-        y = self.data_unc['concentration']
 
         if plot_type == 'conc':
-            y = y
+            y = self.data_unc['concentration']
         elif plot_type == 'ln_conc':
-            y = unumpy.log(y)
+            y = self.data_unc['ln(concentration)']
         elif plot_type == 'inv_conc':
-            y = 1/(y)
+            y = self.data_unc['1/concentration']
         else:
             raise ValueError('Plot type not valid')
 
