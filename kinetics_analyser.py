@@ -48,7 +48,7 @@ class KineticsAnalyser:
 
     def _linear_fit(self, x, y):
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-        return slope, intercept, r_value, p_value, std_err
+        return slope, intercept, r_value**2, p_value, std_err
 
     def _linear_func(self, B, x):
         return B[0]*x + B[1]
@@ -69,19 +69,31 @@ class KineticsAnalyser:
         intercept = out.beta[1]
         r2 = self._odr_r_squared(out.y, y)
         slope_std_err = out.sd_beta[0]
+        intercept_std_err = out.sd_beta[0]
 
-        return slope, intercept, r2, slope_std_err
+        return slope, intercept, r2, slope_std_err, intercept_std_err
 
     def time_dispersion(self):
         return self.data_unc.iloc[:, 3:-2].apply(lambda x: np.std(unumpy.nominal_values(x), ddof=1), axis=1)
 
-    def summary(self):
+    def summary(self, reg_type='odr'):
         concentration = unumpy.nominal_values(
             self.data_unc['concentration'])
+        concentration_unc = unumpy.std_devs(self.data_unc['concentration'])
         ln_concentration = unumpy.nominal_values(
+            self.data_unc['ln(concentration)'])
+        ln_concentration_unc = unumpy.std_devs(
             self.data_unc['ln(concentration)'])
         inv_concentration = unumpy.nominal_values(
             self.data_unc['1/concentration'])
+        inv_concentration_unc = unumpy.std_devs(
+            self.data_unc['1/concentration'])
+
+        # odr standard deviations cannot be zero so let's assing an almost
+        # zero value
+        concentration_unc[concentration_unc == 0] = 1e-30
+        ln_concentration_unc[ln_concentration_unc == 0] = 1e-30
+        inv_concentration_unc[inv_concentration_unc == 0] = 1e-30
 
         d = {}
 
@@ -91,16 +103,29 @@ class KineticsAnalyser:
 
             time = unumpy.nominal_values(
                 self.data_unc[column])
+            time_unc = unumpy.std_devs(
+                self.data_unc[column])
+            time_unc[time_unc == 0] = 1e-30
 
-            zero_order_test = self._linear_fit(
-                time, concentration)
-            first_order_test = self._linear_fit(
-                time, ln_concentration)
-            second_order_test = self._linear_fit(time, inv_concentration)
+            if reg_type == 'odr':
+                zero_order_test = self._odr(
+                    time, concentration, time_unc, concentration_unc)
+                first_order_test = self._odr(
+                    time, ln_concentration, time_unc, ln_concentration_unc)
+                second_order_test = self._odr(
+                    time, inv_concentration, time_unc, inv_concentration_unc)
+            elif reg_type == 'ols':
+                zero_order_test = self._linear_fit(
+                    time, concentration)
+                first_order_test = self._linear_fit(
+                    time, ln_concentration)
+                second_order_test = self._linear_fit(time, inv_concentration)
+            else:
+                raise ValueError('Regression type not valid')
 
-            d_order['R2_zero_order'] = zero_order_test[2]**2
-            d_order['R2_first_order'] = first_order_test[2]**2
-            d_order['R2_second_order'] = second_order_test[2]**2
+            d_order['R2_zero_order'] = zero_order_test[2]
+            d_order['R2_first_order'] = first_order_test[2]
+            d_order['R2_second_order'] = second_order_test[2]
 
             if max(d_order, key=d_order.get) == 'R2_zero_order':
                 order = 0
@@ -182,11 +207,14 @@ class KineticsAnalyser:
         x_err = unumpy.std_devs(x)
         y_err = unumpy.std_devs(y)
 
+        x_err[x_err == 0] = 1e-30
+        y_err[y_err == 0] = 1e-30
+
         return x_values, x_err, y_values, y_err
 
     def plot(self, size=(8, 6), plot_type='conc', ax=None, time_unit='second',
              formula='A', conc_unit='mol/L', conc_or_p='conc',
-             linear_fit=False, column='average'):
+             linear_fit=False, linear_fit_ols=False, column='average'):
 
         if ax is None:
             fig, ax = plt.subplots(figsize=size, facecolor=(1.0, 1.0, 1.0))
@@ -201,12 +229,19 @@ class KineticsAnalyser:
                     yerr=y_err, ecolor='k', capsize=3)
 
         if linear_fit:
-            slope, intercept, r_value, p_value, std_err = self._linear_fit(
-                x_values, y_values)
+            slope, intercept, r_value, slope_std, intercept_std = self._odr(
+                x_values, y_values, x_err, y_err)
             ax.plot(x_values, slope * x_values + intercept,
                     label='y={:.2E}x{:+.2E}  $R^2= {:.2f}$'.format(slope,
                                                                    intercept,
-                                                                   r_value**2))
+                                                                   r_value))
+            if linear_fit_ols:
+                slope, intercept, r_value, p_value, std_err = self._linear_fit(
+                    x_values, y_values)
+                ax.plot(x_values, slope * x_values + intercept,
+                        label='OLS: y={:.2E}x{:+.2E}  $R^2= {:.2f}$'.format(slope,
+                                                                            intercept,
+                                                                            r_value))
 
             ax.legend(loc='best', fontsize=14)
 
