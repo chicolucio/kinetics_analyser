@@ -15,6 +15,13 @@ class KineticsAnalyser:
         self.experiments = divmod(self.data_file.shape[1]-1, 2)[0]
 
         def _data_unc(self):
+            """Creates a pandas data frame with values and uncertainties
+
+            Returns
+            -------
+            Pandas data frame
+                pandas data frame with values and uncertainties
+            """
             df = pd.DataFrame()
             df['concentration'] = unumpy.uarray(
                 self.data_file.iloc[:, 0], self.data_file.iloc[:, 1])
@@ -47,18 +54,79 @@ class KineticsAnalyser:
         self.data_unc = _data_unc(self)
 
     def _linear_fit(self, x, y):
+        """Ordinary least squares (OLS) regression for x and y
+
+        Parameters
+        ----------
+        x : array
+            x values
+        y : array
+            y values
+
+        Returns
+        -------
+        tuple
+            Regression results
+        """
         slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
         return slope, intercept, r_value**2, p_value, std_err
 
     def _linear_func(self, B, x):
+        """Linear function to be used as model for orthogonal distance
+        regression (ODR).
+
+        Parameters
+        ----------
+        B : array
+            Parameters [slope, intercept]
+        x : array
+            x values
+
+        Returns
+        -------
+        array
+            array of y values
+        """
         return B[0]*x + B[1]
 
     def _odr_r_squared(self, y_pred, y):
+        """R2 calculation for ODR
+
+        Parameters
+        ----------
+        y_pred : array
+            predicted values from ODR
+        y : [type]
+            values passed to ODR
+
+        Returns
+        -------
+        float
+            R squared
+        """
         y_abs_error = y_pred - y
         r2 = 1 - (np.var(y_abs_error) / np.var(y))
         return r2
 
     def _odr(self, x, y, x_err, y_err):
+        """Orthogonal distance regression (ODR).
+
+        Parameters
+        ----------
+        x : array
+            x values
+        y : array
+            y values
+        x_err : array
+            x standard deviations
+        y_err : array
+            y standard deviations
+
+        Returns
+        -------
+        tuple
+            Regression results
+        """
         lin_reg = self._linear_fit(x, y)
         linear_model = odr.Model(self._linear_func)
         data = odr.RealData(x, y, sx=x_err, sy=y_err)
@@ -74,9 +142,34 @@ class KineticsAnalyser:
         return slope, intercept, r2, slope_std_err, intercept_std_err
 
     def time_dispersion(self):
+        """Dispersion of time values
+
+        Returns
+        -------
+        array
+            Dispersion in time values from multiple experiments
+        """
         return self.data_unc.iloc[:, 3:-2].apply(lambda x: np.std(unumpy.nominal_values(x), ddof=1), axis=1)
 
     def summary(self, reg_type='odr'):
+        """Creates a pandas data frame with a summary of each experiment,
+        with a calculated order, R2 values and constant rate
+
+        Parameters
+        ----------
+        reg_type : str, optional
+            Regression type: 'odr' or 'ols', by default 'odr'
+
+        Returns
+        -------
+        Pandas data frame
+            pandas data frame
+
+        Raises
+        ------
+        ValueError
+            Error if reg_type is not 'odr' or 'ols'
+        """
         concentration = unumpy.nominal_values(
             self.data_unc['concentration'])
         concentration_unc = unumpy.std_devs(self.data_unc['concentration'])
@@ -153,6 +246,33 @@ class KineticsAnalyser:
     def _plot_params(self, ax=None, plot_type='conc', time_unit='second',
                      formula='A', conc_unit='mol/L', size=12,
                      conc_or_p='conc'):
+        """Internal function for plot parameters.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes, optional
+            axes for the plot, by default None
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+        time_unit : str, optional
+            Time unit, by default 'second'
+        formula : str, optional
+            Chemical formula to be shown in vertical axis, by default 'A'
+        conc_unit : str, optional
+            Concentration unit, by default 'mol/L'
+        size : int, optional
+            Size reference for labels and text, by default 12
+        conc_or_p : str, optional
+            If data is for concentration ('conc') or pressure ('p'), by default
+            'conc'
+
+        Raises
+        ------
+        ValueError
+            Error when plot_type is not 'conc', 'ln_conc' or 'inv_conc'
+        """
         linewidth = 2
 
         # grid and ticks settings
@@ -189,7 +309,27 @@ class KineticsAnalyser:
         return
 
     def _xy(self, plot_type='conc', column='average'):
+        """Returns the x and y values, and their errors, for plots
 
+        Parameters
+        ----------
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+        column : pandas series, optional
+            which column from the data will be used, by default 'average'
+
+        Returns
+        -------
+        tuple
+            x values, x errors, y values and y errors
+
+        Raises
+        ------
+        ValueError
+            Error when plot_type is not 'conc', 'ln_conc' or 'inv_conc'
+        """
         x = self.data_unc[column]
 
         if plot_type == 'conc':
@@ -215,7 +355,39 @@ class KineticsAnalyser:
     def plot(self, size=(8, 6), plot_type='conc', ax=None, time_unit='second',
              formula='A', conc_unit='mol/L', conc_or_p='conc',
              linear_fit=False, linear_fit_ols=False, column='average'):
+        """Plot function
 
+        Parameters
+        ----------
+        size : tuple, optional
+            Plot size, by default (8, 6)
+        plot_type : str, optional
+            Plot type. 'conc' for concentration vs time; 'ln_conc' for
+            ln(concentration) vs time; or 'inv_conc' for 1/concentration vs
+            time.By default 'conc'
+        ax : matplotlib.axes, optional
+            axes for the plot, by default None
+        time_unit : str, optional
+            Time unit, by default 'second'
+        formula : str, optional
+            Chemical formula to be shown in vertical axis, by default 'A'
+        conc_unit : str, optional
+            Concentration unit, by default 'mol/L'
+        If data is for concentration ('conc') or pressure ('p'), by default
+        'conc'
+        linear_fit : bool, optional
+            If a ODR linear regression line will be shown, by default False
+        linear_fit : bool, optional
+            If a linear regression line with OLS will be shown, by default
+            False. Only available if linear_fit=True
+        column : pandas series, optional
+            which column from the data will be used, by default 'average'
+
+        Returns
+        -------
+        matplotlib.axes
+            Plot
+        """
         if ax is None:
             fig, ax = plt.subplots(figsize=size, facecolor=(1.0, 1.0, 1.0))
 
